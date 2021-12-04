@@ -1,7 +1,9 @@
 import unittest
 
 import numpy as np
-from gfit import amgauss, mgauss, fit_mgauss, fit_amgauss, initialise, split_coeff, stack_coeff
+from gfit import amgauss, mgauss, initialise
+from gfit.internal import fit_mgauss, fit_amgauss
+from gfit.util import split_coeff, stack_coeff
 
 def rand_signal(x, big=3, small=2, snr=12):
     """
@@ -49,8 +51,8 @@ class MyTestCase(unittest.TestCase):
         x0 = initialise(x, np.array([y]), n, sym=False, d=4)  # compute initial values
 
         # fit it
-        c = ([0., -11., 0, 0] * n, [11., 11., 11., 11.] * n)
-        fit = fit_amgauss(x, y, x0[0, :], n, c=c, verbose=True, ftol=1e-6, xtol=1e-6)
+        c = np.array(([0., -11., 0, 0] * n, [11., 11., 11., 11.] * n))
+        fit = fit_amgauss(x, y, x0[0, :], n, c=c, verbose=False, ftol=1e-6, xtol=1e-6)
         fa, fb, fc1, fc2 = split_coeff(fit)
 
         # sort results by position and check they're similar
@@ -77,8 +79,8 @@ class MyTestCase(unittest.TestCase):
         x0 = initialise(x, np.array([y]), n, sym=True, d=4)  # compute initial values
 
         # fit it
-        c = ([0., -11., 0] * n, [11., 11., 11.] * n)
-        fit = fit_mgauss(x, y, x0[0, :], n, c=c, verbose=True, ftol=1e-6, xtol=1e-6)
+        c = np.array(([0., -11., 0] * n, [11., 11., 11.] * n))
+        fit = fit_mgauss(x, y, x0[0, :], n, c=c, verbose=False, ftol=1e-6, xtol=1e-6)
         fa, fb, fc1 = split_coeff(fit, sym=True)
 
         # sort results by position and check they're similar
@@ -92,7 +94,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_splitting(self):
         x = np.linspace(-10, 10)
-        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(10)])  # create random array
         x0 = initialise(x, X, 3, sym=False, d=4)  # compute initial values
 
         # check that split and stack functions work for assymetric functions
@@ -107,5 +109,16 @@ class MyTestCase(unittest.TestCase):
         a, b, c = split_coeff(x0, sym=True)
         x1 = stack_coeff(a, b, c)
         assert (x0 == x1).all(), "Error - 2D stacking or splitting doesn't work"
+
+    def test_gfit_single_sym(self):
+        from gfit import gfit
+
+        x = np.linspace(-10, 10)
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+
+        x0 = initialise(x, X, 3, sym=True, d=4)  # compute initial values
+        F = gfit(x, X, x0, 3, sym=True, nthreads=1, vb=True)
+
+
 if __name__ == '__main__':
     unittest.main()
