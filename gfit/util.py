@@ -3,6 +3,8 @@ Utility functions for e.g. stacking / splitting parameter arrays or estimating b
 """
 
 import numpy as np
+from numba import jit
+from tqdm import tqdm
 
 def stack_coeff(a, b, c1, c2=None):
     """
@@ -95,3 +97,87 @@ def get_bounds(x, x0, sym=False, xpad=0.1, hpad=0.5):
         return np.array([[0, mnx, 0] * n, [mxh, mxx, np.inf] * n])
     else:
         return np.array([[0, mnx, 0, 0] * n, [mxh, mxx, np.inf, np.inf] * n])
+
+
+##############
+## Detrending
+##############
+@jit(nopython=True)
+def _split(y, start, end):
+    """
+    Recursively find split points to resolve the convex hull.
+
+    Returns a list of split points between start and end.
+    """
+
+    # compute gradient
+    dy = (y[end] - y[start]) / (end - start)
+
+    # find max of trend-removed deltas
+    midx = 0
+    mv = 0  # set 0 here as we want to ignore negative deltas
+    for i in range(start, end + 1):
+        delta = y[i] - (y[start] + dy * (i - start))  # deviation from trend
+        if delta > mv:
+            mv = delta
+            midx = i
+    if mv <= 1e-10:  # we need a tolerance to avoid floating point errors
+        return [start, end]  # this is a complete segment!
+    else:
+        return _split(y, start, midx)[:-1] + _split(y, midx, end)  # find inner segments and return
+
+
+@jit(nopython=True)
+def _remove_hull(y, upper=True, div=True):
+    """
+    Find convex hull and do trend removal to a 1D signal.
+    Warning: this modifies y in-place.
+    """
+    # get split points
+    if upper:
+        v = _split(y, 0, len(y) - 1, )
+    else:
+        v = _split(-y, 0, len(y) - 1, )
+
+    # evaluate and remove trend
+    for p in range(1, len(v)):  # loop through vertices in hull
+        m = (y[v[p]] - y[v[p - 1]]) / (v[p] - v[p - 1])
+        c = y[v[p - 1]]
+        for j in range(v[p - 1], v[p]):  # evaluate segment
+            if div:
+                y[j] /= m * (j - v[p - 1]) + c
+            else:
+                y[j] -= m * (j - v[p - 1]) + c
+    if div:
+        y[-1] = 1.0  # add last value
+    else:
+        y[-1] = 0.0
+
+
+def remove_hull(X, upper=True, div=True, vb=False):
+    """
+    Fit a convex hull to the specified data and remove it.
+
+    :param X: = a n-d array containing signals that the convex hull will be calculated for in its last dimension.
+    :param upper: = True (default) if an upper convex hull is returned (rather than a lower one).
+    :param div: = True if the convex hull should be removed by division (as opposed to subtraction). Default is True.
+    :param vb: = True if a progress bar should be created. Default is True.
+    """
+
+    # create output array
+    s = X.shape
+    X = X.reshape((-1, X.shape[-1]))
+    out = X.copy()
+
+    # ensure all values are positive and non-zero to avoid wierd stuff when signals have + and - values.
+    out -= np.min(out,axis=-1)[:,None] - 0.1
+
+    # do trend removal
+    loop = range(X.shape[0])
+    if vb:
+        loop = tqdm(loop, desc='Removing hull', leave=False)
+    for i in loop:
+        _remove_hull(out[i, :], upper=upper, div=div)  # remove hull
+
+    # return
+    return out.reshape(s)

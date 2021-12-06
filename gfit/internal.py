@@ -79,12 +79,12 @@ def amgauss_J(x, J, a, b, c1, c2):
             if c1[j] == 0 or c2[j] == 0:  # skip zeros as these cause infs
                 continue
             if x[i] < b[j]:  # which width do we use?
-                J[i, 4 * j] = -math.exp(-(x[i] - b[j]) ** 2 / c1[j])
+                J[i, 4 * j] = math.exp(-(x[i] - b[j]) ** 2 / c1[j])
                 J[i, 4 * j + 1] = ((2 * a[j] * (x[i] - b[j])) / c1[j]) * J[i, 4 * j]
                 J[i, 4 * j + 2] = ((a[j] * (x[i] - b[j]) ** 2) / c1[j] ** 2) * J[i, 4 * j]
                 J[i, 4 * j + 3] = 0
             else:
-                J[i, 4 * j] = -math.exp(-(x[i] - b[j]) ** 2 / c1[j])
+                J[i, 4 * j] = math.exp(-(x[i] - b[j]) ** 2 / c1[j])
                 J[i, 4 * j + 1] = ((2 * a[j] * (x[i] - b[j])) / c1[j]) * J[i, 4 * j]
                 J[i, 4 * j + 2] = 0
                 J[i, 4 * j + 3] = ((a[j] * (x[i] - b[j]) ** 2) / c1[j] ** 2) * J[i, 4 * j]
@@ -107,7 +107,7 @@ def mgauss_J(x, J, a, b, c):
             if c[j] == 0:  # skip zeros as these cause infs
                 continue
             # evaluate partial derivatives
-            J[i, j * 3] = -math.exp(-(x[i] - b[j]) ** 2 / c[j])  # -e^(-(x-b)^2/c)
+            J[i, j * 3] = math.exp(-(x[i] - b[j]) ** 2 / c[j])  # -e^(-(x-b)^2/c)
             J[i, j * 3 + 1] = (2 * a[j] * (x[i] - b[j]) * J[i, j * 3]) / c[j]  # ((2 a (-b + x)) e^(-(-b + x)^2/c) ) / c
             J[i, j * 3 + 2] = (a[j] * ((x[i] - b[j]) ** 2) * J[i, j * 3]) / c[j] ** 2  # (a (-b + x)^2 e^(-(x-b)^2/c) ) / c^2
 
@@ -193,7 +193,7 @@ def lsq_amg(params, x, y, m, J ):
     """
     # evaluate function
     amgauss(x, m, params[::4],params[1::4],params[2::4],params[3::4])
-    return y - m # return residual
+    return m - y # return residual
 
 @jit(nopython=True)
 def lsq_mg(params, x, y, m, J ):
@@ -201,7 +201,7 @@ def lsq_mg(params, x, y, m, J ):
     Calculate residual for least squares optimization of a symmetric multigauss function.
     """
     mgauss(x, m, params[::3],params[1::3],params[2::3])
-    return y - m
+    return m - y
 
 @jit(nopython=True)
 def lsq_Jamg(params, x, y, m, J ):

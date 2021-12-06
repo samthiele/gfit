@@ -117,8 +117,43 @@ class MyTestCase(unittest.TestCase):
         X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
 
         x0 = initialise(x, X, 3, sym=True, d=4)  # compute initial values
-        F = gfit(x, X, x0, 3, sym=True, nthreads=1, vb=True)
+        F = gfit(x, X, x0, 3, sym=True, nthreads=1, vb=True) # run optimisation
 
+    def test_gfit_single_asym(self):
+        from gfit import gfit
+
+        x = np.linspace(-10, 10)
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+
+        x0 = initialise(x, X, 3, sym=False, d=4)  # compute initial values
+        F = gfit(x, X, x0, 3, sym=False, nthreads=1, vb=True) # run optimisation
+
+    def test_gfit_multi_sym(self):
+        pass # TODO
+
+    def test_gfit_multi_asym(self):
+        pass # TODO
+
+    def test_hull(self):
+        from gfit.util import remove_hull
+        x = np.linspace(-10, 10)
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+
+        # divide upper hull (should result in all values  <= 1)
+        Xh = remove_hull( X, upper=True )
+        self.assertTrue( np.max(Xh) <= 1.0 )
+
+        # divide lower hull (should result in all values  >= 1)
+        Xh = remove_hull(X, upper=False)
+        self.assertTrue(np.min(Xh) >= 1.0)
+
+        # subtract upper hull (should result in all values  <= 0)
+        Xh = remove_hull(X, upper=True, div=False)
+        self.assertTrue(np.max(Xh) <= 0.0)
+
+        # subtract lower hull (should result in all values  >= 0)
+        Xh = remove_hull(X, upper=False, div=False)
+        self.assertTrue(np.max(Xh) >= 0.0)
 
 if __name__ == '__main__':
     unittest.main()
