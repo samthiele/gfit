@@ -21,13 +21,14 @@ def gfit(x, X, x0, n, sym=True, nthreads=-1, vb=True ):
    :param sym: true if gaussians are symmetric, False if they are assymetric.
    :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
    :param vb: true if a progress bar should be created. Default is True.
+   :keywords : keywords are passed directly to fit_mgauss or fit_amgauss, and can include numerical settings like ftol, xtol or maxiter.
    :return: x1: an array of optimised gaussian fuctions. See gfit.util.split_coeff( ... ) to split this into individual parameters.
    """
 
    if nthreads == 1:
        return gfit_single( x, X, x0, n, sym=sym, vb=vb  ) # single-threaded
    else:
-       return gfit_multi(x, X, x0, n, sym=sym, vb=vb ) # multi-threaded
+       return gfit_multi(x, X, x0, n, sym=sym, nthreads=nthreads, vb=vb ) # multi-threaded
 
 #################################
 ## Initialization routine

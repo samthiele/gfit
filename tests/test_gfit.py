@@ -3,25 +3,7 @@ import unittest
 import numpy as np
 from gfit import amgauss, mgauss, initialise
 from gfit.internal import fit_mgauss, fit_amgauss
-from gfit.util import split_coeff, stack_coeff
-
-def rand_signal(x, big=3, small=2, snr=12):
-    """
-    Generate a random signal for testing purposes
-    :param x: x values to evaluate gaussians over
-    :param big: number of big gaussian features
-    :param small: number of small gaussian features
-    :param snr: amount of noise
-    :return: y values corresponding to the evaluated multigaussian function.
-    """
-    a = np.hstack([np.random.rand(big) * 2.0, np.random.rand(small) * 0.5])
-    b = (np.random.rand(big + small) * np.ptp(x)) + np.min(x)  # pos
-    c1 = np.random.rand(big + small) * 2 + 0.5
-    c2 = np.random.rand(big + small) * 2 + 0.5
-
-    y = np.zeros_like(x)
-    amgauss(x, y, a, b, c1, c2)
-    return y + (0.5 - np.random.rand(len(x))) * big / snr, a, b, c1, c2
+from gfit.util import split_coeff, stack_coeff, rand_signal
 
 class MyTestCase(unittest.TestCase):
     def test_forward(self):
@@ -129,10 +111,22 @@ class MyTestCase(unittest.TestCase):
         F = gfit(x, X, x0, 3, sym=False, nthreads=1, vb=True) # run optimisation
 
     def test_gfit_multi_sym(self):
-        pass # TODO
+        from gfit import gfit
+
+        x = np.linspace(-10, 10)
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+
+        x0 = initialise(x, X, 3, sym=True, d=4)  # compute initial values
+        F = gfit(x, X, x0, 3, sym=True, nthreads=-1, vb=True)  # run optimisation
 
     def test_gfit_multi_asym(self):
-        pass # TODO
+        from gfit import gfit
+
+        x = np.linspace(-10, 10)
+        X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+
+        x0 = initialise(x, X, 3, sym=False, d=4)  # compute initial values
+        F = gfit(x, X, x0, 3, sym=False, nthreads=-1, vb=True)  # run optimisation
 
     def test_hull(self):
         from gfit.util import remove_hull
@@ -155,5 +149,8 @@ class MyTestCase(unittest.TestCase):
         Xh = remove_hull(X, upper=False, div=False)
         self.assertTrue(np.max(Xh) >= 0.0)
 
+    def test_benchmark(self):
+        from gfit.util import benchmark
+        benchmark(size=100, vb=True) # run benchmark
 if __name__ == '__main__':
     unittest.main()

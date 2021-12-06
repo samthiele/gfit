@@ -5,6 +5,7 @@ Utility functions for e.g. stacking / splitting parameter arrays or estimating b
 import numpy as np
 from numba import jit
 from tqdm import tqdm
+import timeit
 
 def stack_coeff(a, b, c1, c2=None):
     """
@@ -181,3 +182,113 @@ def remove_hull(X, upper=True, div=True, vb=False):
 
     # return
     return out.reshape(s)
+
+def rand_signal(x, big=3, small=2, snr=12):
+    """
+    Generate a random signal for testing purposes
+    :param x: x values to evaluate gaussians over
+    :param big: number of big gaussian features
+    :param small: number of small gaussian features
+    :param snr: amount of noise
+    :return: y values corresponding to the evaluated multigaussian function.
+    """
+
+    from gfit.internal import amgauss
+
+    a = np.hstack([np.random.rand(big) * 2.0, np.random.rand(small) * 0.5])
+    b = (np.random.rand(big + small) * np.ptp(x)) + np.min(x)  # pos
+    c1 = np.random.rand(big + small) * 2 + 0.5
+    c2 = np.random.rand(big + small) * 2 + 0.5
+
+    y = np.zeros_like(x)
+    amgauss(x, y, a, b, c1, c2)
+    return y + (0.5 - np.random.rand(len(x))) * big / snr, a, b, c1, c2
+
+
+def benchmark(size=1000, res=100, it=10, nf=3, nthreads=1, vb=True):
+    """
+    Create and fit some simple benchmark data for gauging performance.
+    :param size: number of models to fit. Default is 10000.
+    :param res: number of points in each spectra to fit. Default is 100.
+    :param it: number of times to repeat each operation being benchmarked. Default is 10.
+    :param nf: number of features to use for each operation being benchmarked. Default is 3.
+    :param nthreads: number of threads to use for computation. Default is 1.
+    :param vb: True if benchmark results should be printed.
+    :return: a dictionary of benchmark times.
+    """
+
+    # setup output and progress bar
+    B = {}
+    from tqdm import tqdm
+    pbar = tqdm(total=5, desc='Running benchmarks', leave=False)
+
+    from gfit.internal import amgauss
+    x = np.linspace(-100, 100, res)
+    y = np.zeros_like(x)
+    a = np.hstack([np.random.rand(nf) * 2.0])
+    b = (np.random.rand(nf) * np.ptp(x)) + np.min(x)  # pos',
+    c1 = np.random.rand(nf) * 2 + 0.5
+    c2 = np.random.rand(nf) * 2 + 0.5
+
+    # run a basic forward model benchmark
+    def b1():
+        amgauss(x, y, a, b, c1, c2)
+
+    B['Multigauss evaluation'] = (timeit.timeit(b1, number=it, globals=globals()), it)
+    pbar.update(1)
+
+    # run a symmetric initialisation benchmark
+    from gfit.util import rand_signal
+    from gfit import initialise
+    X = np.array([rand_signal(x, snr=14)[0] for i in range(size)])  # create random test dataset
+    x0_sym = initialise(x, X, nf, sym=True, d=4, nthreads=nthreads)  # we use this later
+
+    def b2():
+        x0 = initialise(x, X, nf, sym=True, d=4, nthreads=nthreads)  # compute initial values
+
+    B['Initialisation (symmetric)'] = (timeit.timeit(b2, number=it, globals=globals()), it)
+    pbar.update(1)
+
+    # run a asymmetric initialisation benchmark
+    from gfit.util import rand_signal
+    X = np.array([rand_signal(x, snr=14)[0] for i in range(size)])  # create random test dataset
+    x0_asym = initialise(x, X, nf, sym=False, d=4, nthreads=nthreads)  # we use this later
+
+    def b3():
+        initialise(x, X, nf, sym=False, d=4, nthreads=nthreads)  # compute initial values
+
+    B['Initialisation (asymmetric)'] = (timeit.timeit(b3, number=it, globals=globals()), it)
+    pbar.update(1)
+
+    # run a symmetric fitting benchmark
+    from gfit import gfit
+    def b4():
+        gfit(x, X, x0_sym, nf, sym=True, nthreads=nthreads, vb=False)
+
+    B['Fitting (symmetric)'] = (timeit.timeit(b4, number=it, globals=globals()), it)
+    pbar.update(1)
+
+    # run asymmetric fitting benchmark
+    from gfit import gfit
+    def b5():
+        gfit(x, X, x0_asym, nf, sym=False, nthreads=nthreads, vb=False)
+
+    B['Fitting (asymmetric)'] = (timeit.timeit(b5, number=it, globals=globals()), it)
+    pbar.update(1)
+    pbar.close()
+
+    if vb:  # make a pretty print out
+        print("\nBenchmark using %d signals of length %d and fitting %d features." % (size, res, nf))
+        print("Using %d computation threads [Use -1 to set maximum default]." % nthreads)
+        for k, v in B.items():
+            t = float(v[0]) / (float(v[1])*size)
+            if t < 1e-7:
+                print(" - ", k, ': %.3f ns per signal' % (t * 1e9))
+            elif t < 1e-4:
+                print(" - ", k, ': %.3f μs per signal' % (t * 1e6))
+            elif t < 1e-2:  # use ms
+                print(" - ", k, ': %.3f ms per signal' % (t * 1e3))
+            else:
+                print(" - ", k, ': %.3f seconds signal' % t)
+
+    return B

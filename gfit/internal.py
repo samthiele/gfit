@@ -296,7 +296,7 @@ def check_bounds( x0, mn, mx):
             return False
     return True
 
-def gfit_single(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds ):
+def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
     """ Single-threaded multigaussian fitting"""
 
     # wrap X and x0 if needed
@@ -322,14 +322,111 @@ def gfit_single(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds ):
     if vb:
         loop = tqdm(loop, desc='Fitting gaussians',leave=False)
     for i in loop:
-        out[i,:] = _opt(x,X[i,:],x0[i,:],n,c)
+        out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,**kwds)
 
     # return
     return out
 
-def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds ):
-    """ Multi-threaded multigaussian fitting"""
-    pass # TODO
+
+def _mp_opt_sym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
+    """
+    Multiprocessing worker function.
+    """
+
+    X, sX = X
+    x0, sx0 = x0
+    out, sout = out
+    c = np.array([c0, c1])
+
+    # do main loop
+    loop = range(start, end)
+    if vb:
+        loop = tqdm(loop, desc='Fitting gaussians', leave=False)
+    for i in loop:
+        out[i * sout: (i + 1) * sout] = fit_mgauss(np.frombuffer(x, dtype=np.double),  # x-vals
+                                                   np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
+                                                   np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
+                                                   # initial guess
+                                                   n, c, **kwds)  # number of features, number of constraints
+
+
+def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
+    """
+    Multiprocessing worker function.
+    """
+
+    # parse arrays and strides
+    X, sX = X
+    x0, sx0 = x0
+    out, sout = out
+    c = np.array([c0, c1])
+
+    # do main loop
+    loop = range(start, end)
+    if vb:
+        loop = tqdm(loop, desc='Fitting gaussians', leave=False)
+    for i in loop:
+        out[i * sout: (i + 1) * sout] = fit_amgauss(np.frombuffer(x, dtype=np.double),  # x-vals
+                                                    np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
+                                                    np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
+                                                    # initial guess
+                                                    n, c, **kwds)  # number of features, number of constraints
+
+# x, X, x0, n, sym=sym, vb=vb
+def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds):
+    """ Single-threaded multigaussian fitting"""
+
+    import multiprocessing as mp
+
+    # wrap X and x0 if needed
+    if len(X.shape) == 1:
+        X = np.array([X])
+    if len(x0.shape) == 1:
+        x0 = np.array([x0])
+
+    # reshape
+    outshape = x0.shape
+    X = X.reshape((-1, X.shape[-1])).astype(np.double)
+    x0 = x0.reshape((-1, x0.shape[-1])).astype(np.double)
+
+    # get bounds
+    c = kwds.pop("c", get_bounds(x, x0, sym=sym))
+
+    # create shared memory for input / output arrays
+    mp_x = mp.Array("d", x, lock=False)
+    mp_X = (mp.Array("d", X.ravel(order='C'), lock=False), X.shape[-1])  # N.B. these will be ( flat array, stride )
+    mp_x0 = (mp.Array("d", x0.ravel(order='C'), lock=False), x0.shape[-1])  # N.B. these will be ( flat array, stride )
+    mp_out = (mp.Array("d", x0.ravel(order='C'), lock=False), x0.shape[-1])
+    mp_c0 = mp.Array("d", np.array(c[0]), lock=False)
+    mp_c1 = mp.Array("d", np.array(c[1]), lock=False)
+
+    # build and launch threads
+    if nthreads == -1:
+        nthreads = mp.cpu_count() - 1
+    proc = []
+    idx = [(int(X.shape[0] / nthreads) * i, int(X.shape[0] / nthreads) * (i + 1)) for i in range(nthreads - 1)]
+    for start, end in idx:
+        if sym:
+            p = mp.Process(target=_mp_opt_sym, args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, start, end - 1, kwds, False))
+        else:
+            p = mp.Process(target=_mp_opt_asym,
+                           args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, start, end - 1, kwds, False))
+        p.start()
+        proc.append(p)
+
+    # crunch our own data in this thread (largely to display a meaningful progress bar)
+    if sym:
+        _mp_opt_sym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, idx[-1][-1], X.shape[0], kwds, vb)
+    else:
+        _mp_opt_asym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, idx[-1][-1], X.shape[0], kwds, vb)
+
+    # wait until threads are complete
+    for p in proc:
+        p.join()
+
+    # return results
+    return np.array(mp_out[0]).reshape(outshape)
+
 
 ### numpy implementation of multigauss function [ slower than numba + pure python ]
 # @jit(nopython=True)
