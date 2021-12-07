@@ -2,19 +2,30 @@
 Functions used internally by gfit but not (really) intended for public scope.
 """
 
+import os
+
+# disable numpy multi-threading; we handle this.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
 from scipy.optimize import least_squares
+import numba
 from numba import jit
 from .util import get_bounds
 import math
 from tqdm import tqdm
+
 
 #################################
 ## Multi-gaussian model
 #################################
 
 ### implementation no numpy
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def amgauss(x, y, a, b, c1, c2):
     """
     Evaluate and sum a set of asymmetric gaussian functions.
@@ -38,7 +49,7 @@ def amgauss(x, y, a, b, c1, c2):
                 y[i] += a[j] * math.exp(-(x[i] - b[j]) ** 2 / c2[j])
 
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def mgauss(x, y, a, b, c):
     """
     Evaluate and sum a set of symmetric gaussian functions.
@@ -61,7 +72,7 @@ def mgauss(x, y, a, b, c):
 ## Jacobians associated with multi-gauss functions
 #########################################################
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def amgauss_J(x, J, a, b, c1, c2):
     """
     Evaluate return the Jacobian to amgauss.
@@ -90,7 +101,7 @@ def amgauss_J(x, J, a, b, c1, c2):
                 J[i, 4 * j + 3] = ((a[j] * (x[i] - b[j]) ** 2) / c1[j] ** 2) * J[i, 4 * j]
 
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def mgauss_J(x, J, a, b, c):
     """
     Evaluate and return the jacobian to mgauss.
@@ -115,7 +126,7 @@ def mgauss_J(x, J, a, b, c):
 ## Initialization routines
 #################################
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def est_peaks(x, y, n, sym=True, d=10):
     """
     Find the n-largest peaks and use these to create an initial guess
@@ -186,7 +197,7 @@ def est_peaks(x, y, n, sym=True, d=10):
 #################################
 ## Least squares fitting
 #################################
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def lsq_amg(params, x, y, m, J ):
     """
     Calculate residual for least squares optimization of an asymmetric multigauss function.
@@ -195,7 +206,7 @@ def lsq_amg(params, x, y, m, J ):
     amgauss(x, m, params[::4],params[1::4],params[2::4],params[3::4])
     return m - y # return residual
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def lsq_mg(params, x, y, m, J ):
     """
     Calculate residual for least squares optimization of a symmetric multigauss function.
@@ -203,7 +214,7 @@ def lsq_mg(params, x, y, m, J ):
     mgauss(x, m, params[::3],params[1::3],params[2::3])
     return m - y
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def lsq_Jamg(params, x, y, m, J ):
     """
     Calculate and return jacobian for least-squares optimization of asymmetric multigauss function.
@@ -211,7 +222,7 @@ def lsq_Jamg(params, x, y, m, J ):
     amgauss_J(x, J, params[::4],params[1::4],params[2::4],params[3::4])
     return J
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def lsq_Jmg(params, x, y, m, J ):
     """
     Calculate and return jacobian for least-squares optimization of symmetric multigauss function.
@@ -286,7 +297,7 @@ def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, ma
                         ftol=ftol, xtol=xtol, max_nfev=maxiter)
     return fit.x
 
-@jit(nopython=True)
+@jit(nopython=True,nogil=True,cache=True)
 def check_bounds( x0, mn, mx):
     """
     Checks that bounds are valid, and asserts False with a usable warning message if not.
@@ -298,6 +309,10 @@ def check_bounds( x0, mn, mx):
 
 def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
     """ Single-threaded multigaussian fitting"""
+
+    # set number of threads to 1
+    t = numba.get_num_threads()  # store so we set this back later
+    numba.set_num_threads(1)
 
     # wrap X and x0 if needed
     if len(X.shape) == 1:
@@ -324,6 +339,9 @@ def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
     for i in loop:
         out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,**kwds)
 
+    # reset number of threads
+    numba.set_num_threads(t)
+
     # return
     return out
 
@@ -338,6 +356,10 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
     out, sout = out
     c = np.array([c0, c1])
 
+    # set number of threads to use by numba
+    t = numba.get_num_threads()  # store so we set this back later
+    numba.set_num_threads(1)
+
     # do main loop
     loop = range(start, end)
     if vb:
@@ -348,7 +370,7 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
                                                    np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
                                                    # initial guess
                                                    n, c, **kwds)  # number of features, number of constraints
-
+    numba.set_num_threads(t)
 
 def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
     """
@@ -361,6 +383,10 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
     out, sout = out
     c = np.array([c0, c1])
 
+    # set number of threads to use by numba
+    t = numba.get_num_threads()  # store so we set this back later
+    numba.set_num_threads(1)
+
     # do main loop
     loop = range(start, end)
     if vb:
@@ -371,8 +397,8 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
                                                     np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
                                                     # initial guess
                                                     n, c, **kwds)  # number of features, number of constraints
+    numba.set_num_threads(t)
 
-# x, X, x0, n, sym=sym, vb=vb
 def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds):
     """ Single-threaded multigaussian fitting"""
 

@@ -2,6 +2,15 @@
 Utility functions for e.g. stacking / splitting parameter arrays or estimating bounds.
 """
 
+import os
+
+# disable numpy multi-threading; we handle this.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
 from numba import jit
 from tqdm import tqdm
@@ -27,7 +36,6 @@ def stack_coeff(a, b, c1, c2=None):
             return np.vstack([a, b, c1, c2]).reshape(a.shape[:-1] + (a.shape[-1] * 4,), order='F')
         else:
             return np.vstack([a, b, c1]).reshape(a.shape[:-1] + (a.shape[-1] * 3,), order='F')
-
 
 def split_coeff(arr, sym=False):
     """
@@ -284,7 +292,7 @@ def benchmark(size=1000, res=100, it=10, nf=3, nthreads=1, vb=True):
             t = float(v[0]) / (float(v[1])*size)
             if t < 1e-7:
                 print(" - ", k, ': %.3f ns per signal' % (t * 1e9))
-            elif t < 1e-4:
+            elif t <1e-4:
                 print(" - ", k, ': %.3f μs per signal' % (t * 1e6))
             elif t < 1e-2:  # use ms
                 print(" - ", k, ': %.3f ms per signal' % (t * 1e3))

@@ -1,8 +1,16 @@
+import os
+
+# disable numpy multi-threading; we handle this.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import numpy as np
 import numba
 from numba import jit
 from numba import prange
-
 from .internal import amgauss, mgauss, est_peaks, gfit_single, gfit_multi
 
 
