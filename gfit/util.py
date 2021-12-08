@@ -112,12 +112,20 @@ def get_bounds(x, x0, sym=False, xpad=0.1, hpad=0.5):
 ## Detrending
 ##############
 @jit(nopython=True)
-def _split(y, start, end):
+def _split(y, start, end, n):
     """
     Recursively find split points to resolve the convex hull.
 
     Returns a list of split points between start and end.
     """
+
+    if (end-start <= 1): # special case - segment has only one data point in it
+        return [start,end]
+    if n > 100: # escape for max recursion [ reports and stops weird crashes occasionally ]
+        print("Error - recursion depth exceeded for segment", start, " - ", end )
+        print("Problematic Y values:", y[start:end])
+        print("All Y values:", y)
+        assert False
 
     # compute gradient
     dy = (y[end] - y[start]) / (end - start)
@@ -133,8 +141,7 @@ def _split(y, start, end):
     if mv <= 1e-10:  # we need a tolerance to avoid floating point errors
         return [start, end]  # this is a complete segment!
     else:
-        return _split(y, start, midx)[:-1] + _split(y, midx, end)  # find inner segments and return
-
+        return _split(y, start, midx, n+1)[:-1] + _split(y, midx, end, n+1)  # find inner segments and return
 
 @jit(nopython=True)
 def _remove_hull(y, upper=True, div=True):
@@ -144,9 +151,9 @@ def _remove_hull(y, upper=True, div=True):
     """
     # get split points
     if upper:
-        v = _split(y, 0, len(y) - 1, )
+        v = _split(y, 0, int(len(y) - 1), int(0) )
     else:
-        v = _split(-y, 0, len(y) - 1, )
+        v = _split(-y, 0, int(len(y) - 1), int(0))
 
     # evaluate and remove trend
     for p in range(1, len(v)):  # loop through vertices in hull
@@ -176,7 +183,7 @@ def remove_hull(X, upper=True, div=True, vb=False):
     # create output array
     s = X.shape
     X = X.reshape((-1, X.shape[-1]))
-    out = X.copy()
+    out = X.copy().astype(float)
 
     # ensure all values are positive and non-zero to avoid wierd stuff when signals have + and - values.
     out -= np.min(out,axis=-1)[:,None] - 0.1

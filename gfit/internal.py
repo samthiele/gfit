@@ -14,7 +14,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 from scipy.optimize import least_squares
 import numba
-from numba import jit
+from numba import jit, prange
 from .util import get_bounds
 import math
 from tqdm import tqdm
@@ -230,7 +230,7 @@ def lsq_Jmg(params, x, y, m, J ):
     mgauss_J(x, J, params[::3],params[1::3],params[2::3])
     return J
 
-def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
+def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
     """
     Fit a symmetric multigauss to the provided 1-D data.
 
@@ -255,6 +255,11 @@ def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, max
         print("   x0 = %s" % x0)
         print("   c = %s" % c)
 
+    # check threshold
+    if thresh > 0:
+        if np.max( x0[::3] ) < thresh:
+            return x0 # don't fit
+
     # refine inital guess using subset of data
     m = np.zeros_like(x)  # models will be evaluated here [ to save lots of memory allocations ]
     J = np.zeros((len(x), n * 3))
@@ -264,7 +269,7 @@ def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, max
     return fit.x
 
 
-def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
+def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
     """
     Fit a asymmetric multigauss to the provided 1-D data.
 
@@ -289,6 +294,11 @@ def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), ftol=1e-1, xtol=0, scale=0, ma
         print("   x0 = %s" % x0)
         print("   c = %s" % c)
 
+    # check threshold
+    if thresh > 0:
+        if np.max( x0[::4] ) < thresh:
+            return x0 # don't fit
+
     # refine inital guess using subset of data
     m = np.zeros_like(x)  # models will be evaluated here [ to save lots of memory allocations ]
     J = np.zeros((len(x), n * 4))
@@ -307,7 +317,7 @@ def check_bounds( x0, mn, mx):
             return False
     return True
 
-def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
+def gfit_single(x, X, x0, n, sym=True, thresh=-1, vb=True, **kwds ):
     """ Single-threaded multigaussian fitting"""
 
     # set number of threads to 1
@@ -337,7 +347,7 @@ def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
     if vb:
         loop = tqdm(loop, desc='Fitting gaussians',leave=False)
     for i in loop:
-        out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,**kwds)
+        out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,thresh,**kwds)
 
     # reset number of threads
     numba.set_num_threads(t)
@@ -346,7 +356,7 @@ def gfit_single(x, X, x0, n, sym=True, vb=True, **kwds ):
     return out
 
 
-def _mp_opt_sym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
+def _mp_opt_sym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     """
     Multiprocessing worker function.
     """
@@ -369,10 +379,10 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
                                                    np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
                                                    np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
                                                    # initial guess
-                                                   n, c, **kwds)  # number of features, number of constraints
+                                                   n, c, thresh, **kwds)  # number of features, number of constraints
     numba.set_num_threads(t)
 
-def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
+def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     """
     Multiprocessing worker function.
     """
@@ -396,10 +406,10 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, n, start, end, kwds, vb):
                                                     np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
                                                     np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
                                                     # initial guess
-                                                    n, c, **kwds)  # number of features, number of constraints
+                                                    n, c, thresh, **kwds)  # number of features, number of constraints
     numba.set_num_threads(t)
 
-def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds):
+def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
     """ Single-threaded multigaussian fitting"""
 
     import multiprocessing as mp
@@ -433,18 +443,18 @@ def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds):
     idx = [(int(X.shape[0] / nthreads) * i, int(X.shape[0] / nthreads) * (i + 1)) for i in range(nthreads - 1)]
     for start, end in idx:
         if sym:
-            p = mp.Process(target=_mp_opt_sym, args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, start, end - 1, kwds, False))
+            p = mp.Process(target=_mp_opt_sym, args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, thresh, n, start, end - 1, kwds, False))
         else:
             p = mp.Process(target=_mp_opt_asym,
-                           args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, start, end - 1, kwds, False))
+                           args=(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, thresh, n, start, end - 1, kwds, False))
         p.start()
         proc.append(p)
 
     # crunch our own data in this thread (largely to display a meaningful progress bar)
     if sym:
-        _mp_opt_sym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, idx[-1][-1], X.shape[0], kwds, vb)
+        _mp_opt_sym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, thresh, n, idx[-1][-1], X.shape[0], kwds, vb)
     else:
-        _mp_opt_asym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, n, idx[-1][-1], X.shape[0], kwds, vb)
+        _mp_opt_asym(mp_x, mp_X, mp_x0, mp_out, mp_c0, mp_c1, thresh, n, idx[-1][-1], X.shape[0], kwds, vb)
 
     # wait until threads are complete
     for p in proc:
@@ -453,6 +463,57 @@ def gfit_multi(x, X, x0, n, sym=True, nthreads=-1, vb=True, **kwds):
     # return results
     return np.array(mp_out[0]).reshape(outshape)
 
+@jit(nopython=True, parallel=True)
+def init(x, X, n, sym=True, d=10, nthreads=-1):
+    """
+    Compute initial estimates of gaussian positions, widths and heights for a vector of spectra / signals.
+
+    *Arguments*:
+     :param x:  = a (n,) array containing the x-values of the spectra / signals.
+     :param X: = a (m,n) array containing corresponding y-values for m different spectra / signals.
+     :param n: = the number of gaussians to fit.
+     :param sym: = True if symmetric gaussians should be fit.
+     :param d: = the distance to test for local maxima where X[i,j±range(1,d)] <  X[i,d].
+     :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
+     :return: x1: an array of estimated gaussian functions based on local peak detection.
+              See gfit.util.split_coeff( ... ) to split this into individual parameters and gfit(...) to optimize it.
+    """
+
+    # init output array
+    if sym:
+        out = np.zeros((X.shape[0], n * 3))  # scale, position, width for each feature
+    else:
+        out = np.zeros((X.shape[0], n * 4))  # scale, position, width_L, width_R for each feature
+
+    # setup multithreading
+    if nthreads != -1:  # -1 uses numba default
+        t = numba.get_num_threads()  # store so we set this back later
+        numba.set_num_threads(nthreads)
+
+    # loop through spectra
+    for i in prange(X.shape[0]):
+
+        # find initial values
+        x0 = est_peaks(x, X[i, :], sym=sym, n=n, d=d)
+
+        # store them
+        for j in range(n):
+            if sym:
+                out[i, j * 3] = x0[0][j]
+                out[i, j * 3 + 1] = x0[1][j]
+                out[i, j * 3 + 2] = x0[2][j]
+            else:
+                out[i, j * 4] = x0[0][j]
+                out[i, j * 4 + 1] = x0[1][j]
+                out[i, j * 4 + 2] = x0[2][j]
+                out[i, j * 4 + 3] = x0[3][j]
+
+    # reset default nthreads
+    if nthreads != -1:
+        numba.set_num_threads(t)
+
+    # return
+    return out
 
 ### numpy implementation of multigauss function [ slower than numba + pure python ]
 # @jit(nopython=True)
