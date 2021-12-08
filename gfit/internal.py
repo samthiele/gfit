@@ -95,10 +95,10 @@ def amgauss_J(x, J, a, b, c1, c2):
                 J[i, 4 * j + 2] = ((a[j] * (x[i] - b[j]) ** 2) / c1[j] ** 2) * J[i, 4 * j]
                 J[i, 4 * j + 3] = 0
             else:
-                J[i, 4 * j] = math.exp(-(x[i] - b[j]) ** 2 / c1[j])
-                J[i, 4 * j + 1] = ((2 * a[j] * (x[i] - b[j])) / c1[j]) * J[i, 4 * j]
+                J[i, 4 * j] = math.exp(-(x[i] - b[j]) ** 2 / c2[j])
+                J[i, 4 * j + 1] = ((2 * a[j] * (x[i] - b[j])) / c2[j]) * J[i, 4 * j]
                 J[i, 4 * j + 2] = 0
-                J[i, 4 * j + 3] = ((a[j] * (x[i] - b[j]) ** 2) / c1[j] ** 2) * J[i, 4 * j]
+                J[i, 4 * j + 3] = ((a[j] * (x[i] - b[j]) ** 2) / c2[j] ** 2) * J[i, 4 * j]
 
 
 @jit(nopython=True,nogil=True,cache=True)
