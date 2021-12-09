@@ -68,6 +68,24 @@ def mgauss(x, y, a, b, c):
                 continue
             y[i] += a[j] * math.exp(-(x[i] - b[j]) ** 2 / c[j])
 
+@jit(nopython=True,nogil=True,cache=True)
+def eval( x, M, Y, sym=False ):
+    """
+    Evaluate an array of multigaussian models.
+    :param x: a (n,) array of x-values to evaluate gaussians at.
+    :param M: a (m,b) array containing b model parameters (where b = 3*nfeatures for symmetric and 4*nfeatures for assymetric models).
+    :param Y: a (m,n) array to put results into.
+    :param sym: True if M represents a set of symmetric features (3-parameter), False (Default) if it contains asymmetric (4-parameter) ones.
+    """
+
+    # evaluate symmetric model
+    if sym:
+        for i in range(len(M)):
+            mgauss( x, Y[i,:], M[i,::3], M[i,1::3], M[i,2::3] )
+    else: # evaluate asymmetric model
+        for i in range(len(M)):
+            amgauss( x, Y[i,:], M[i,::4], M[i,1::4], M[i,2::4], M[i,3::4] )
+
 #########################################################
 ## Jacobians associated with multi-gauss functions
 #########################################################
@@ -193,6 +211,58 @@ def est_peaks(x, y, n, sym=True, d=10):
     else:  # return assymetric
         return a, b, c1, c2
 
+
+@jit(nopython=True, parallel=True)
+def init(x, X, n, sym=True, d=10, nthreads=-1):
+    """
+    Compute initial estimates of gaussian positions, widths and heights for a vector of spectra / signals.
+
+    *Arguments*:
+     :param x:  = a (n,) array containing the x-values of the spectra / signals.
+     :param X: = a (m,n) array containing corresponding y-values for m different spectra / signals.
+     :param n: = the number of gaussians to fit.
+     :param sym: = True if symmetric gaussians should be fit.
+     :param d: = the distance to test for local maxima where X[i,j±range(1,d)] <  X[i,d].
+     :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
+     :return: x1: an array of estimated gaussian functions based on local peak detection.
+              See gfit.util.split_coeff( ... ) to split this into individual parameters and gfit(...) to optimize it.
+    """
+
+    # init output array
+    if sym:
+        out = np.zeros((X.shape[0], n * 3))  # scale, position, width for each feature
+    else:
+        out = np.zeros((X.shape[0], n * 4))  # scale, position, width_L, width_R for each feature
+
+    # setup multithreading
+    if nthreads != -1:  # -1 uses numba default
+        t = numba.get_num_threads()  # store so we set this back later
+        numba.set_num_threads(nthreads)
+
+    # loop through spectra
+    for i in prange(X.shape[0]):
+
+        # find initial values
+        x0 = est_peaks(x, X[i, :], sym=sym, n=n, d=d)
+
+        # store them
+        for j in range(n):
+            if sym:
+                out[i, j * 3] = x0[0][j]
+                out[i, j * 3 + 1] = x0[1][j]
+                out[i, j * 3 + 2] = x0[2][j]
+            else:
+                out[i, j * 4] = x0[0][j]
+                out[i, j * 4 + 1] = x0[1][j]
+                out[i, j * 4 + 2] = x0[2][j]
+                out[i, j * 4 + 3] = x0[3][j]
+
+    # reset default nthreads
+    if nthreads != -1:
+        numba.set_num_threads(t)
+
+    # return
+    return out
 
 #################################
 ## Least squares fitting
@@ -463,57 +533,6 @@ def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
     # return results
     return np.array(mp_out[0]).reshape(outshape)
 
-@jit(nopython=True, parallel=True)
-def init(x, X, n, sym=True, d=10, nthreads=-1):
-    """
-    Compute initial estimates of gaussian positions, widths and heights for a vector of spectra / signals.
-
-    *Arguments*:
-     :param x:  = a (n,) array containing the x-values of the spectra / signals.
-     :param X: = a (m,n) array containing corresponding y-values for m different spectra / signals.
-     :param n: = the number of gaussians to fit.
-     :param sym: = True if symmetric gaussians should be fit.
-     :param d: = the distance to test for local maxima where X[i,j±range(1,d)] <  X[i,d].
-     :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
-     :return: x1: an array of estimated gaussian functions based on local peak detection.
-              See gfit.util.split_coeff( ... ) to split this into individual parameters and gfit(...) to optimize it.
-    """
-
-    # init output array
-    if sym:
-        out = np.zeros((X.shape[0], n * 3))  # scale, position, width for each feature
-    else:
-        out = np.zeros((X.shape[0], n * 4))  # scale, position, width_L, width_R for each feature
-
-    # setup multithreading
-    if nthreads != -1:  # -1 uses numba default
-        t = numba.get_num_threads()  # store so we set this back later
-        numba.set_num_threads(nthreads)
-
-    # loop through spectra
-    for i in prange(X.shape[0]):
-
-        # find initial values
-        x0 = est_peaks(x, X[i, :], sym=sym, n=n, d=d)
-
-        # store them
-        for j in range(n):
-            if sym:
-                out[i, j * 3] = x0[0][j]
-                out[i, j * 3 + 1] = x0[1][j]
-                out[i, j * 3 + 2] = x0[2][j]
-            else:
-                out[i, j * 4] = x0[0][j]
-                out[i, j * 4 + 1] = x0[1][j]
-                out[i, j * 4 + 2] = x0[2][j]
-                out[i, j * 4 + 3] = x0[3][j]
-
-    # reset default nthreads
-    if nthreads != -1:
-        numba.set_num_threads(t)
-
-    # return
-    return out
 
 ### numpy implementation of multigauss function [ slower than numba + pure python ]
 # @jit(nopython=True)

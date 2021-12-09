@@ -1,8 +1,8 @@
 import unittest
 
 import numpy as np
-from gfit import amgauss, mgauss, initialise
-from gfit.internal import fit_mgauss, fit_amgauss
+from gfit import initialise, evaluate, gfit
+from gfit.internal import fit_mgauss, fit_amgauss, amgauss, mgauss
 from gfit.util import split_coeff, stack_coeff, rand_signal
 
 class MyTestCase(unittest.TestCase):
@@ -17,6 +17,20 @@ class MyTestCase(unittest.TestCase):
         # run asymmetric gaussian
         amgauss(x, y, np.array([1, 2, ]), np.array([-2, 2.5]), np.array([5, 5]), np.array([1, 1]) )
         self.assertTrue((y >= 0).all())
+
+        # test batch evaluation
+        M = np.array( [ [1., -2., 5., 2., 2.5, 5. ] for i in range(100)] )
+        Y = evaluate( x, M, sym=True )
+        self.assertTrue( M.shape[0] == Y.shape[0] ) # check shape of output is sensible
+        self.assertTrue( Y.shape[-1] == x.shape[0] )
+        self.assertTrue( np.max( Y ) > 1. )
+
+        M = np.array( [ [ np.array([1., -2., 5., 10.,  2., 2.5, 5., 2.]) for i in range(100)] for n in range(10) ] )
+        Y = evaluate(x, M, sym=False)
+        self.assertTrue(M.shape[0] == Y.shape[0])  # check shape of output is sensible
+        self.assertTrue(M.shape[1] == Y.shape[1])  # check shape of output is sensible
+        self.assertTrue(Y.shape[-1] == x.shape[0])
+        self.assertTrue(np.max(Y) > 1.)
 
     def test_backward_asym(self):
         # generate test signal
