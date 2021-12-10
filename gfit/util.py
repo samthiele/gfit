@@ -255,7 +255,7 @@ def benchmark(size=1000, res=100, it=10, nf=3, nthreads=1, vb=True):
     # run a symmetric initialisation benchmark
     from gfit.util import rand_signal
     from gfit import initialise
-    X = np.array([rand_signal(x, snr=14)[0] for i in range(size)])  # create random test dataset
+    X = np.array([rand_signal(x, snr=20)[0] for i in range(size)])  # create random test dataset
     x0_sym = initialise(x, X, nf, sym=True, d=4, nthreads=nthreads)  # we use this later
 
     def b2():

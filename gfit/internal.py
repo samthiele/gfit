@@ -68,6 +68,7 @@ def mgauss(x, y, a, b, c):
                 continue
             y[i] += a[j] * math.exp(-(x[i] - b[j]) ** 2 / c[j])
 
+
 @jit(nopython=True,nogil=True,cache=True)
 def eval( x, M, Y, sym=False ):
     """
@@ -123,7 +124,7 @@ def amgauss_J(x, J, a, b, c1, c2):
 def mgauss_J(x, J, a, b, c):
     """
     Evaluate and return the jacobian to mgauss.
-
+    
     *Arguments*:
      - x = array of x-values to evaluate gaussians over.
      - J = (n,3) array to put output jacobian in (avoids doing memory allocation). This is where the output will be stored.
@@ -300,7 +301,7 @@ def lsq_Jmg(params, x, y, m, J ):
     mgauss_J(x, J, params[::3],params[1::3],params[2::3])
     return J
 
-def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
+def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-4, xtol=1e-4, scale=0, maxiter=100, verbose=False):
     """
     Fit a symmetric multigauss to the provided 1-D data.
 
@@ -310,14 +311,15 @@ def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, s
      - x0 = the initial guess as a stacked (1d) array [see stack_coeff].
      - n = number of gaussians to fit.
      - c = a tuple of contstrains like ([x00min,x01min,...,x0nmin],[x00max,x01max,...,x0nmax]). Set as None to use no constraints.
-     - ftol = ftol parameter of scipy.optimize.least_squares
+     - ftol = ftol parameter of scipy.optimize.least_squares. Default is 1e-4.
+     - xtol = xtol parameter of scipy.optimize.least_squares. Default is 1e-4.
+     - scale = scale parameter of scipy.optimize.least_squares. Default is x[1] - x[0].
+     - maxiter = the maximum number of iterations allowed per fitting step. Default is 100.
     """
 
     # compute defaults if needed
-    if scale == 0:
+    if scale <= 0:
         scale = x[1] - x[0]
-    if xtol == 0:
-        xtol = scale / 100
 
     # check bounds
     if not check_bounds( x0, c[0], c[1] ):
@@ -339,7 +341,7 @@ def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, s
     return fit.x
 
 
-def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, scale=0, maxiter=15, verbose=False):
+def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-4, xtol=1e-4, scale=0, maxiter=100, verbose=False):
     """
     Fit a asymmetric multigauss to the provided 1-D data.
 
@@ -349,14 +351,15 @@ def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-1, xtol=0, 
      - x0 = the initial guess as a stacked (1d) array [see stack_coeff].
      - n = number of gaussians to fit.
      - c = a tuple of contstrains like ([x00min,x01min,...,x0nmin],[x00max,x01max,...,x0nmax]). Set as None to use no constraints.
-     - ftol = ftol parameter of scipy.optimize.least_squares
+     - ftol = ftol parameter of scipy.optimize.least_squares. Default is 1e-4.
+     - xtol = xtol parameter of scipy.optimize.least_squares. Default is 1e-4.
+     - scale = scale parameter of scipy.optimize.least_squares. Default is x[1] - x[0].
+     - maxiter = the maximum number of iterations allowed per fitting step. Default is 100.
     """
 
     # compute defaults if needed
-    if scale == 0:
+    if scale <= 0:
         scale = x[1] - x[0]
-    if xtol == 0:
-        xtol = scale / 100
 
     # check bounds
     if not check_bounds( x0, c[0,:], c[1,:] ):
