@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='gfit',
-    version='0.1',
+    version='0.2',
     url='https://github.com/samthiele/gfit',
     license='MIT',
     author='Sam Thiele',

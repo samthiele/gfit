@@ -124,7 +124,7 @@ def amgauss_J(x, J, a, b, c1, c2):
 def mgauss_J(x, J, a, b, c):
     """
     Evaluate and return the jacobian to mgauss.
-    
+
     *Arguments*:
      - x = array of x-values to evaluate gaussians over.
      - J = (n,3) array to put output jacobian in (avoids doing memory allocation). This is where the output will be stored.
