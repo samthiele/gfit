@@ -144,30 +144,30 @@ def _split(y, start, end, n):
         return _split(y, start, midx, n+1)[:-1] + _split(y, midx, end, n+1)  # find inner segments and return
 
 @jit(nopython=True)
-def _remove_hull(y, upper=True, div=True):
+def _remove_hull(y, offs, upper=True, div=True):
     """
     Find convex hull and do trend removal to a 1D signal.
     Warning: this modifies y in-place.
     """
     # get split points
     if upper:
-        v = _split(y, 0, int(len(y) - 1), int(0) )
+        v = _split(y + offs, 0, int(len(y) - 1), int(0))
     else:
-        v = _split(-y, 0, int(len(y) - 1), int(0))
+        v = _split(-(y + offs), 0, int(len(y) - 1), int(0))
 
-    # evaluate and remove trend
+    # evaluate trend
+    t = y.copy()
     for p in range(1, len(v)):  # loop through vertices in hull
         m = (y[v[p]] - y[v[p - 1]]) / (v[p] - v[p - 1])
         c = y[v[p - 1]]
-        for j in range(v[p - 1], v[p]):  # evaluate segment
-            if div:
-                y[j] /= m * (j - v[p - 1]) + c
-            else:
-                y[j] -= m * (j - v[p - 1]) + c
+        for j in range(v[p - 1], v[p]):  # evaluate hull over segment
+            t[j] = m * (j - v[p - 1]) + c
+
+    # remove trend
     if div:
-        y[-1] = 1.0  # add last value
+        y /= t
     else:
-        y[-1] = 0.0
+        y -= t
 
 
 def remove_hull(X, upper=True, div=True, vb=False):
@@ -186,14 +186,14 @@ def remove_hull(X, upper=True, div=True, vb=False):
     out = X.copy().astype(float)
 
     # ensure all values are positive and non-zero to avoid wierd stuff when signals have + and - values.
-    out -= np.min(out,axis=-1)[:,None] - 0.1
+    offs = np.min(out,axis=-1) + 0.1
 
     # do trend removal
     loop = range(X.shape[0])
     if vb:
         loop = tqdm(loop, desc='Removing hull', leave=False)
     for i in loop:
-        _remove_hull(out[i, :], upper=upper, div=div)  # remove hull
+        _remove_hull(out[i, :], offs=offs[i], upper=upper, div=div)  # remove hull
 
     # return
     return out.reshape(s)

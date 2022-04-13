@@ -156,6 +156,7 @@ class MyTestCase(unittest.TestCase):
         from gfit.util import remove_hull
         x = np.linspace(-10, 10)
         X = np.array([rand_signal(x, snr=14)[0] for i in range(1000)])  # create random array
+        X = np.abs(X) # remove negatives as this breaks the whole logic of a hull correction
 
         # divide upper hull (should result in all values  <= 1)
         Xh = remove_hull( X, upper=True )
