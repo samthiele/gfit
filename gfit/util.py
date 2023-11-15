@@ -254,7 +254,7 @@ def benchmark(size=1000, res=100, it=10, nf=3, nthreads=1, vb=True):
 
     # run a symmetric initialisation benchmark
     from gfit.util import rand_signal
-    from gfit import initialise
+    from gfit import initialise, refine
     X = np.array([rand_signal(x, snr=20)[0] for i in range(size)])  # create random test dataset
     x0_sym = initialise(x, X, nf, sym=True, d=4, nthreads=nthreads)  # we use this later
 
@@ -275,20 +275,25 @@ def benchmark(size=1000, res=100, it=10, nf=3, nthreads=1, vb=True):
     B['Initialisation (asymmetric)'] = (timeit.timeit(b3, number=it, globals=globals()), it)
     pbar.update(1)
 
+    # run a refine computation benchmark
+    def b4():
+        refine(x, X, x0_asym )
+    B['Refine estimate polynomial'] = (timeit.timeit(b4, number=it, globals=globals()), it)
+
     # run a symmetric fitting benchmark
     from gfit import gfit
-    def b4():
+    def b5():
         gfit(x, X, x0_sym, nf, sym=True, nthreads=nthreads, vb=False)
 
-    B['Fitting (symmetric)'] = (timeit.timeit(b4, number=it, globals=globals()), it)
+    B['Fitting (symmetric)'] = (timeit.timeit(b5, number=it, globals=globals()), it)
     pbar.update(1)
 
     # run asymmetric fitting benchmark
     from gfit import gfit
-    def b5():
+    def b6():
         gfit(x, X, x0_asym, nf, sym=False, nthreads=nthreads, vb=False)
 
-    B['Fitting (asymmetric)'] = (timeit.timeit(b5, number=it, globals=globals()), it)
+    B['Fitting (asymmetric)'] = (timeit.timeit(b6, number=it, globals=globals()), it)
     pbar.update(1)
     pbar.close()
 

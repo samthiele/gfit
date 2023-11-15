@@ -8,7 +8,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 
-from .internal import amgauss, mgauss, est_peaks, gfit_single, gfit_multi, init, eval
+from .internal import amgauss, mgauss, est_peaks, gfit_single, gfit_multi, init, eval, refine
 
 
 #################################
