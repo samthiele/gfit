@@ -417,11 +417,18 @@ def gfit_single(x, X, x0, n, sym=True, thresh=-1, vb=True, **kwds ):
 
     # loop through all data points
     loop = range(0,X.shape[0])
+    skipped = 0
     if vb:
         loop = tqdm(loop, desc='Fitting gaussians',leave=False)
     for i in loop:
-        out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,thresh,**kwds)
-
+        try:
+            out[i,:] = _opt(x,X[i,:],x0[i,:],n,c,thresh,**kwds)
+        except:
+            skipped += 1
+            continue # fit failed for strange reason
+    if skipped > 0:
+        print("Warning: fitting skipped %d points due to convergence errors"%skipped)
+    
     # reset number of threads
     numba.set_num_threads(t)
 
@@ -447,12 +454,19 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     loop = range(start, end)
     if vb:
         loop = tqdm(loop, desc='Fitting gaussians', leave=False)
+    skipped = 0
     for i in loop:
-        out[i * sout: (i + 1) * sout] = fit_mgauss(np.frombuffer(x, dtype=np.double),  # x-vals
-                                                   np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
-                                                   np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
-                                                   # initial guess
-                                                   n, c, thresh, **kwds)  # number of features, number of constraints
+        try:
+            out[i * sout: (i + 1) * sout] = fit_mgauss(np.frombuffer(x, dtype=np.double),  # x-vals
+                                                    np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
+                                                    np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
+                                                    # initial guess
+                                                    n, c, thresh, **kwds)  # number of features, number of constraints
+        except:
+            skipped += 1
+            continue # fit failed for strange reason
+    if skipped > 0:
+        print("Warning: fitting skipped %d points due to convergence errors"%skipped)
     numba.set_num_threads(t)
 
 def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
@@ -472,14 +486,21 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
 
     # do main loop
     loop = range(start, end)
+    skipped = 0
     if vb:
         loop = tqdm(loop, desc='Fitting gaussians', leave=False)
     for i in loop:
-        out[i * sout: (i + 1) * sout] = fit_amgauss(np.frombuffer(x, dtype=np.double),  # x-vals
-                                                    np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
-                                                    np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
-                                                    # initial guess
-                                                    n, c, thresh, **kwds)  # number of features, number of constraints
+        try:
+            out[i * sout: (i + 1) * sout] = fit_amgauss(np.frombuffer(x, dtype=np.double),  # x-vals
+                                                        np.frombuffer(X, dtype=np.double)[i * sX:(i + 1) * sX],  # y-vals
+                                                        np.frombuffer(x0, dtype=np.double)[i * sx0:(i + 1) * sx0],
+                                                        # initial guess
+                                                        n, c, thresh, **kwds)  # number of features, number of constraints
+        except:
+            skipped += 1
+            continue # fit failed for strange reason
+    if skipped > 0:
+        print("Warning: fitting skipped %d points due to convergence errors"%skipped)
     numba.set_num_threads(t)
 
 def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
