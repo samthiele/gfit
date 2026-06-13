@@ -1,0 +1,71 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Numba cache
+*.nbc
+*.nbi
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg
+*.egg-info/
+*.egg-info
+.installed.cfg
+*.manifest
+*.spec
+pip-wheel-metadata/
+share/python-wheels/
+wheels/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# mypy / type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Ruff / linters
+.ruff_cache/

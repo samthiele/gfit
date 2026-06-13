@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='gfit',
-    version='0.2',
+    version='0.3',
     url='https://github.com/samthiele/gfit',
     license='MIT',
     author='Sam Thiele',
@@ -22,7 +22,15 @@ setup(
         ],
     keywords='gaussian data fitting spectral features',
     python_requires='>=3.6',
-    install_requires=['numpy', 'scipy', 'numba', 'tqdm'],
+    install_requires=[
+        'numpy',
+        'scipy',
+        'tqdm',
+        'numba; extra != "nonumba"',
+    ],
+    extras_require={
+        'nonumba': [],
+    },
     project_urls={  # Optional
             'Source': 'https://github.com/samthiele/gfit',
         },

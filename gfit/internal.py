@@ -13,11 +13,51 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import numpy as np
 from scipy.optimize import least_squares
-import numba
-from numba import jit, prange
+from ._accel import jit, prange, get_num_threads, set_num_threads
 from .util import get_bounds
 import math
+import platform
+import sys
+import warnings
 from tqdm import tqdm
+
+_mp_available = None
+_warned_mp_fallback = False
+
+
+def _multiprocessing_available():
+    """
+    Return True if multiprocessing can be used for parallel fitting.
+
+    Cached after the first check. WebAssembly targets (Pyodide, etc.) and
+    environments where Process creation fails fall back to single-threaded code.
+    """
+    global _mp_available
+    if _mp_available is not None:
+        return _mp_available
+
+    if sys.platform in ("emscripten", "wasi"):
+        _mp_available = False
+        return False
+
+    if platform.machine() in ("wasm32", "wasm64"):
+        _mp_available = False
+        return False
+
+    # Assume available on normal platforms; gfit_multi falls back if startup fails.
+    _mp_available = True
+    return True
+
+
+def _warn_mp_fallback():
+    global _warned_mp_fallback
+    if not _warned_mp_fallback:
+        _warned_mp_fallback = True
+        warnings.warn(
+            "multiprocessing unavailable; using single-threaded fitting.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 #################################
@@ -214,31 +254,12 @@ def est_peaks(x, y, n, sym=True, d=10):
 
 
 @jit(nopython=True, parallel=True)
-def init(x, X, n, sym=True, d=10, nthreads=-1):
-    """
-    Compute initial estimates of gaussian positions, widths and heights for a vector of spectra / signals.
-
-    *Arguments*:
-     :param x:  = a (n,) array containing the x-values of the spectra / signals.
-     :param X: = a (m,n) array containing corresponding y-values for m different spectra / signals.
-     :param n: = the number of gaussians to fit.
-     :param sym: = True if symmetric gaussians should be fit.
-     :param d: = the distance to test for local maxima where X[i,j±range(1,d)] <  X[i,d].
-     :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
-     :return: x1: an array of estimated gaussian functions based on local peak detection.
-              See gfit.util.split_coeff( ... ) to split this into individual parameters and gfit(...) to optimize it.
-    """
-
+def _init_impl(x, X, n, sym=True, d=10):
     # init output array
     if sym:
         out = np.zeros((X.shape[0], n * 3))  # scale, position, width for each feature
     else:
         out = np.zeros((X.shape[0], n * 4))  # scale, position, width_L, width_R for each feature
-
-    # setup multithreading
-    if nthreads != -1:  # -1 uses numba default
-        t = numba.get_num_threads()  # store so we set this back later
-        numba.set_num_threads(nthreads)
 
     # loop through spectra
     for i in prange(X.shape[0]):
@@ -258,12 +279,31 @@ def init(x, X, n, sym=True, d=10, nthreads=-1):
                 out[i, j * 4 + 2] = x0[2][j]
                 out[i, j * 4 + 3] = x0[3][j]
 
-    # reset default nthreads
-    if nthreads != -1:
-        numba.set_num_threads(t)
-
-    # return
     return out
+
+
+def init(x, X, n, sym=True, d=10, nthreads=-1):
+    """
+    Compute initial estimates of gaussian positions, widths and heights for a vector of spectra / signals.
+
+    *Arguments*:
+     :param x:  = a (n,) array containing the x-values of the spectra / signals.
+     :param X: = a (m,n) array containing corresponding y-values for m different spectra / signals.
+     :param n: = the number of gaussians to fit.
+     :param sym: = True if symmetric gaussians should be fit.
+     :param d: = the distance to test for local maxima where X[i,j±range(1,d)] <  X[i,d].
+     :param nthreads: the number of threads to use for evaluation. Default is #CPUs - 1.
+     :return: x1: an array of estimated gaussian functions based on local peak detection.
+              See gfit.util.split_coeff( ... ) to split this into individual parameters and gfit(...) to optimize it.
+    """
+    if nthreads != -1:  # -1 uses numba default
+        t = get_num_threads()
+        set_num_threads(nthreads)
+    try:
+        return _init_impl(x, X, n, sym, d)
+    finally:
+        if nthreads != -1:
+            set_num_threads(t)
 
 #################################
 ## Least squares fitting
@@ -394,8 +434,8 @@ def gfit_single(x, X, x0, n, sym=True, thresh=-1, vb=True, **kwds ):
     """ Single-threaded multigaussian fitting"""
 
     # set number of threads to 1
-    t = numba.get_num_threads()  # store so we set this back later
-    numba.set_num_threads(1)
+    t = get_num_threads()  # store so we set this back later
+    set_num_threads(1)
 
     # wrap X and x0 if needed
     if len(X.shape) == 1:
@@ -430,7 +470,7 @@ def gfit_single(x, X, x0, n, sym=True, thresh=-1, vb=True, **kwds ):
         print("Warning: fitting skipped %d points due to convergence errors"%skipped)
     
     # reset number of threads
-    numba.set_num_threads(t)
+    set_num_threads(t)
 
     # return
     return out
@@ -447,8 +487,8 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     c = np.array([c0, c1])
 
     # set number of threads to use by numba
-    t = numba.get_num_threads()  # store so we set this back later
-    numba.set_num_threads(1)
+    t = get_num_threads()  # store so we set this back later
+    set_num_threads(1)
 
     # do main loop
     loop = range(start, end)
@@ -467,7 +507,7 @@ def _mp_opt_sym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
             continue # fit failed for strange reason
     if skipped > 0:
         print("Warning: fitting skipped %d points due to convergence errors"%skipped)
-    numba.set_num_threads(t)
+    set_num_threads(t)
 
 def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     """
@@ -481,8 +521,8 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
     c = np.array([c0, c1])
 
     # set number of threads to use by numba
-    t = numba.get_num_threads()  # store so we set this back later
-    numba.set_num_threads(1)
+    t = get_num_threads()  # store so we set this back later
+    set_num_threads(1)
 
     # do main loop
     loop = range(start, end)
@@ -501,11 +541,11 @@ def _mp_opt_asym(x, X, x0, out, c0, c1, thresh, n, start, end, kwds, vb):
             continue # fit failed for strange reason
     if skipped > 0:
         print("Warning: fitting skipped %d points due to convergence errors"%skipped)
-    numba.set_num_threads(t)
+    set_num_threads(t)
 
-def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
-    """ Single-threaded multigaussian fitting"""
 
+def _gfit_multi_mp(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
+    """Multiprocessing worker pool for multigaussian fitting."""
     import multiprocessing as mp
 
     # wrap X and x0 if needed
@@ -556,6 +596,27 @@ def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
 
     # return results
     return np.array(mp_out[0]).reshape(outshape)
+
+
+def gfit_multi(x, X, x0, n, sym=True, thresh=-1, nthreads=-1, vb=True, **kwds):
+    """
+    Multiprocess multigaussian fitting.
+
+    Falls back to gfit_single when multiprocessing is unavailable (e.g. Pyodide)
+    or if parallel startup fails at runtime.
+    """
+    if not _multiprocessing_available():
+        _warn_mp_fallback()
+        return gfit_single(x, X, x0, n, sym=sym, thresh=thresh, vb=vb, **kwds)
+    try:
+        return _gfit_multi_mp(
+            x, X, x0, n, sym=sym, thresh=thresh, nthreads=nthreads, vb=vb, **kwds
+        )
+    except Exception:
+        global _mp_available
+        _mp_available = False
+        _warn_mp_fallback()
+        return gfit_single(x, X, x0, n, sym=sym, thresh=thresh, vb=vb, **kwds)
 
 
 ### numpy implementation of multigauss function [ slower than numba + pure python ]

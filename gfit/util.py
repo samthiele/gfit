@@ -12,7 +12,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import numpy as np
-from numba import jit
+from ._accel import jit
 from tqdm import tqdm
 import timeit
 
