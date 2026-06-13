@@ -28,6 +28,29 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
+  test-nonumba:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package without numba
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[scipy]"
+
+      - name: Run nonumba tests
+        run: python -m unittest tests.test_gfit_nonumba -v
+
   test-minimal:
     runs-on: ubuntu-latest
     strategy:
@@ -43,10 +66,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install minimal package
+      - name: Install package without numba or scipy
         run: |
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Run nonumba tests
-        run: python -m unittest tests.test_gfit_nonumba -v
+      - name: Run noscipy tests
+        run: python -m unittest tests.test_util_noscipy -v
