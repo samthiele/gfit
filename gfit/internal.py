@@ -12,7 +12,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import numpy as np
-from scipy.optimize import least_squares
+from ._scipy import require_least_squares
 from ._accel import jit, prange, get_num_threads, set_num_threads
 from .util import get_bounds
 import math
@@ -375,7 +375,7 @@ def fit_mgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-4, xtol=1e-4
     # refine inital guess using subset of data
     m = np.zeros_like(x)  # models will be evaluated here [ to save lots of memory allocations ]
     J = np.zeros((len(x), n * 3))
-    fit = least_squares(lsq_mg, x0=x0, args=(x, y, m, J), jac=lsq_Jmg,
+    fit = require_least_squares()(lsq_mg, x0=x0, args=(x, y, m, J), jac=lsq_Jmg,
                         x_scale=scale, bounds=c, verbose=verbose,
                         ftol=ftol, xtol=xtol, max_nfev=maxiter)
     return fit.x
@@ -415,7 +415,7 @@ def fit_amgauss(x, y, x0, n, c=(-np.inf, np.inf), thresh=-1, ftol=1e-4, xtol=1e-
     # refine inital guess using subset of data
     m = np.zeros_like(x)  # models will be evaluated here [ to save lots of memory allocations ]
     J = np.zeros((len(x), n * 4))
-    fit = least_squares(lsq_amg, x0=x0, args=(x, y, m, J), jac=lsq_Jamg,
+    fit = require_least_squares()(lsq_amg, x0=x0, args=(x, y, m, J), jac=lsq_Jamg,
                         x_scale=scale, bounds=c, verbose=verbose,
                         ftol=ftol, xtol=xtol, max_nfev=maxiter)
     return fit.x

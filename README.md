@@ -15,19 +15,24 @@ Fast multi-Gaussian curve fitting for spectra and other 1D signals.
 
 ## Installation
 
+**Default install:** Python ≥ 3.6, NumPy, SciPy, tqdm, Numba.
+
 ```bash
 pip install gfit
 ```
 
-Numba is included by default for best performance.
+**Minimal install:** Python ≥ 3.6, NumPy, tqdm.
 
-To install **without** Numba (e.g. Pyodide, minimal environments):
+For minimalist install without numba or scipy, use:
 
 ```bash
-pip install gfit[nonumba]
+pip install gfit[nonumba]   # no Numba or SciPy (Pyodide, pure-Python fallback)
 ```
 
-Requirements: Python ≥ 3.6, NumPy, SciPy, tqdm.
+In this configuration the hull correction code will still work (but without numba speed boost). If scipy is installed or available then 
+full functionality will be available (but slower than if number is installed).
+
+Gaussian fitting (`gfit`, `initialise`, `evaluate`) still imports without SciPy, but calling the fitters raises an `ImportError` with install instructions.
 
 ## Quick start
 

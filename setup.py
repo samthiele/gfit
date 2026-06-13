@@ -24,8 +24,8 @@ setup(
     python_requires='>=3.6',
     install_requires=[
         'numpy',
-        'scipy',
         'tqdm',
+        'scipy; extra != "nonumba"',
         'numba; extra != "nonumba"',
     ],
     extras_require={
