@@ -9,30 +9,33 @@ Fast multi-Gaussian curve fitting for spectra and other 1D signals.
 - Fit **symmetric** (amplitude, centre, width) or **asymmetric** (separate left/right widths) Gaussians
 - Batch fitting over `(n_spectra, n_points)` arrays
 - Automatic peak-based initialisation via `initialise()`
-- Optional **Numba** JIT acceleration (default install)
+- Optional **Numba** JIT acceleration (`pip install "gfit[all]"`)
 - Pure-Python fallback when Numba is unavailable
 - Multiprocessing for large batches; automatic single-threaded fallback in Pyodide / WebAssembly
 
 ## Installation
 
-**Default install:** Python ≥ 3.6, NumPy, SciPy, tqdm, Numba.
+**Minimal install** (NumPy and tqdm only; pure-Python fallback):
 
 ```bash
 pip install gfit
 ```
 
-**Minimal install:** Python ≥ 3.6, NumPy, tqdm.
-
-For minimalist install without numba or scipy, use:
+**Recommended install** (NumPy, SciPy, tqdm, Numba):
 
 ```bash
-pip install gfit[nonumba]   # no Numba or SciPy (Pyodide, pure-Python fallback)
+pip install "gfit[all]"
 ```
 
-In this configuration the hull correction code will still work (but without numba speed boost). If scipy is installed or available then 
-full functionality will be available (but slower than if number is installed).
+**SciPy only** (no Numba; slower fitting, no JIT):
 
-Gaussian fitting (`gfit`, `initialise`, `evaluate`) still imports without SciPy, but calling the fitters raises an `ImportError` with install instructions.
+```bash
+pip install "gfit[scipy]"
+```
+
+On zsh, quote extras: `pip install "gfit[all]"` (unquoted brackets are treated as globs).
+
+Gaussian fitting (`gfit`, `initialise`, `evaluate`) imports without SciPy, but calling the fitters raises an `ImportError` with install instructions unless SciPy is installed.
 
 ## Quick start
 
@@ -112,8 +115,8 @@ from gfit.internal import fit_mgauss, fit_amgauss
 
 ## Performance
 
-- With **Numba** (default): hot loops are JIT-compiled; batch initialisation can use parallel `prange`.
-- With **`gfit[nonumba]`** or a missing Numba install: the same code runs as pure Python (correct, but slower). A warning is emitted once at import.
+- With **Numba** (`gfit[all]`): hot loops are JIT-compiled; batch initialisation can use parallel `prange`.
+- With a **minimal install** or missing Numba: the same code runs as pure Python (correct, but slower). A warning is emitted once at import.
 - **`nthreads=-1`** (default) uses multiprocessing to fit spectra in parallel on desktop Python.
 - **`nthreads=1`** uses a single process (recommended for small batches or constrained environments).
 

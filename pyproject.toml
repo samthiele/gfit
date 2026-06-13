@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gfit"
+version = "0.4"
+description = "Fast multi-gaussian curve fitting"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Sam Thiele", email = "sam.thiele01@gmail.com" }]
+keywords = ["gaussian", "data fitting", "spectral features"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+requires-python = ">=3.6"
+dependencies = [
+    "numpy",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+all = ["scipy", "numba"]
+scipy = ["scipy"]
+
+[project.urls]
+Homepage = "https://github.com/samthiele/gfit"
+Source = "https://github.com/samthiele/gfit"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gfit*"]
